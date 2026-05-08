@@ -94,18 +94,16 @@
             -webkit-text-fill-color: transparent;
             filter: drop-shadow(0 2px 4px rgba(200, 160, 60, 0.5));
             line-height: 1.1;
-            display: inline-block;
-            margin-bottom: 8px; /* 给金线留空间 */
+            display: block;
+            margin-bottom: 6px;
         }
 
-        .header-title::after {
-            content: '';
-            position: absolute;
-            bottom: -4px;
-            left: 50%;
-            transform: translateX(-50%);
+        /* ✅ 金线独立元素 */
+        .gold-line {
             width: 70%;
+            max-width: 400px;
             height: 2px;
+            margin: 0 auto 8px auto;
             background: linear-gradient(90deg, transparent, var(--gold), transparent);
             border-radius: 50%;
         }
@@ -116,7 +114,6 @@
             letter-spacing: 0.2em;
             font-weight: 600;
             text-transform: uppercase;
-            margin-top: 10px;
             display: block;
         }
 
@@ -603,6 +600,7 @@
 
         <header class="header">
             <h1 class="header-title">ALL IN NIGHT</h1>
+            <div class="gold-line"></div> <!-- ✅ 金线独立元素 -->
             <p class="header-subtitle">SNG娱乐赛</p>
         </header>
 
