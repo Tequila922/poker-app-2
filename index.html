@@ -95,7 +95,7 @@
             filter: drop-shadow(0 2px 4px rgba(200, 160, 60, 0.5));
             line-height: 1.1;
             display: inline-block;
-            margin-bottom: 4px;
+            margin-bottom: 8px; /* 给金线留空间 */
         }
 
         .header-title::after {
@@ -104,7 +104,7 @@
             bottom: -4px;
             left: 50%;
             transform: translateX(-50%);
-            width: 60%;
+            width: 70%;
             height: 2px;
             background: linear-gradient(90deg, transparent, var(--gold), transparent);
             border-radius: 50%;
@@ -116,7 +116,8 @@
             letter-spacing: 0.2em;
             font-weight: 600;
             text-transform: uppercase;
-            margin-top: 6px;
+            margin-top: 10px;
+            display: block;
         }
 
         .main-content {
@@ -601,7 +602,7 @@
         <div class="top-right-note">筹码均为记分牌 无任何作用</div>
 
         <header class="header">
-            <h1 class="header-title">All in Night</h1>
+            <h1 class="header-title">ALL IN NIGHT</h1>
             <p class="header-subtitle">SNG娱乐赛</p>
         </header>
 
@@ -746,7 +747,7 @@
             }
 
             function speakLevelUp(level) {
-                if (level === 1) return; // 第1级不语音（由start处理）
+                if (level === 1) return;
                 playAudio('level' + level + '.mp3');
             }
 
