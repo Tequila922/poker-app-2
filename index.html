@@ -65,7 +65,6 @@
             position: relative;
         }
 
-        /* 右上角提示 */
         .top-right-note {
             position: absolute;
             top: 12px;
@@ -78,7 +77,6 @@
             pointer-events: none;
         }
 
-        /* 标题区域 */
         .header {
             text-align: center;
             padding: 10px 0 6px;
@@ -121,7 +119,6 @@
             margin-top: 6px;
         }
 
-        /* 主内容 - 横向排列 */
         .main-content {
             display: flex;
             gap: 12px;
@@ -531,7 +528,7 @@
             border-radius: 18px;
             font-size: 0.8rem;
             font-weight: 600;
-            z-index: 1000;
+            z-index: 1100;
             pointer-events: none;
             transition: transform 0.4s;
             border: 1px solid var(--gold-dark);
@@ -709,7 +706,28 @@
             let toastTimeout = null;
             let levelUpOverlayTimeout = null;
 
-            // 防锁屏音频上下文（静默循环）
+            // 屏幕唤醒锁
+            let wakeLock = null;
+            async function requestWakeLock() {
+                try {
+                    if ('wakeLock' in navigator) {
+                        wakeLock = await navigator.wakeLock.request('screen');
+                        wakeLock.addEventListener('release', () => {
+                            // 锁被释放，可尝试重新请求
+                        });
+                    }
+                } catch (err) {
+                    // 静默失败，不影响主流程
+                }
+            }
+            async function releaseWakeLock() {
+                if (wakeLock) {
+                    await wakeLock.release();
+                    wakeLock = null;
+                }
+            }
+
+            // 防锁屏静默音频
             let lockAudioCtx = null;
             function enableNoSleep() {
                 try {
@@ -719,16 +737,13 @@
                     if (lockAudioCtx.state === 'suspended') {
                         lockAudioCtx.resume();
                     }
-                    // 创建一个极短的静默缓冲区并循环播放，防止手机自动锁屏
                     const buffer = lockAudioCtx.createBuffer(1, 1, 22050);
                     const source = lockAudioCtx.createBufferSource();
                     source.buffer = buffer;
                     source.loop = true;
                     source.connect(lockAudioCtx.destination);
                     source.start(0);
-                } catch (e) {
-                    // 静默失败
-                }
+                } catch (e) {}
             }
 
             const STORAGE_KEY = 'all_in_night_data_v3';
@@ -965,7 +980,8 @@
 
             function startTimer() {
                 if(isRunning) return;
-                enableNoSleep(); // 防止锁屏
+                enableNoSleep();
+                requestWakeLock(); // 请求屏幕唤醒锁
                 if(remainingSeconds <= 0 && currentLevelIndex >= TOTAL_LEVELS-1) {
                     showToast('已是最后级别'); return;
                 }
@@ -982,6 +998,7 @@
                     if(remainingSeconds <= 0) {
                         clearInterval(timerInterval); timerInterval = null;
                         isRunning = false; updateStartButton();
+                        releaseWakeLock(); // 释放唤醒锁
                         if(currentLevelIndex < TOTAL_LEVELS-1) {
                             advanceLevel();
                             remainingSeconds = LEVEL_DURATION_SECONDS;
@@ -1011,6 +1028,7 @@
                 if(!isRunning) return;
                 clearInterval(timerInterval); timerInterval = null;
                 isRunning = false; updateStartButton(); updateTimerDisplay(); saveData();
+                releaseWakeLock(); // 暂停时释放唤醒锁
             }
 
             function resetTimer() {
@@ -1089,30 +1107,63 @@
                 setTimeout(()=> $playerList.scrollTop = $playerList.scrollHeight, 200);
             }
 
+            // 页面可见性处理（精确计时补偿）
             document.addEventListener('visibilitychange', ()=>{
                 if(document.hidden) {
-                    if(isRunning && timerInterval) document._hiddenAt = Date.now();
+                    if(isRunning && timerInterval) {
+                        document._hiddenAt = Date.now();
+                        clearInterval(timerInterval);
+                        timerInterval = null;
+                    }
                 } else {
                     if(isRunning && document._hiddenAt) {
-                        const elapsed = Math.floor((Date.now() - document._hiddenAt)/1000);
-                        if(elapsed > 0) {
-                            remainingSeconds = Math.max(0, remainingSeconds - elapsed);
+                        const elapsed = Math.floor((Date.now() - document._hiddenAt) / 1000);
+                        remainingSeconds = Math.max(0, remainingSeconds - elapsed);
+                        updateTimerDisplay();
+                        if(remainingSeconds <= 0) {
+                            // 时间到，自动升级
+                            if(currentLevelIndex < TOTAL_LEVELS-1) {
+                                advanceLevel();
+                                remainingSeconds = LEVEL_DURATION_SECONDS;
+                                updateTimerDisplay();
+                                saveData();
+                            } else {
+                                remainingSeconds = 0;
+                                updateTimerDisplay();
+                                saveData();
+                                showToast('🏁 所有级别已完成！', true);
+                                isRunning = false;
+                                updateStartButton();
+                                releaseWakeLock();
+                                return;
+                            }
+                        }
+                        // 重新启动定时器
+                        timerInterval = setInterval(()=>{
+                            remainingSeconds--;
                             updateTimerDisplay();
                             if(remainingSeconds <= 0) {
                                 clearInterval(timerInterval); timerInterval = null;
                                 isRunning = false; updateStartButton();
+                                releaseWakeLock();
                                 if(currentLevelIndex < TOTAL_LEVELS-1) {
-                                    advanceLevel(); remainingSeconds = LEVEL_DURATION_SECONDS;
-                                    updateTimerDisplay(); saveData(); startTimer();
+                                    advanceLevel();
+                                    remainingSeconds = LEVEL_DURATION_SECONDS;
+                                    updateTimerDisplay();
+                                    saveData();
+                                    startTimer();
                                 } else {
-                                    remainingSeconds = 0; updateTimerDisplay(); saveData();
                                     showToast('🏁 所有级别已完成！', true);
+                                    remainingSeconds = 0;
+                                    updateTimerDisplay();
+                                    saveData();
                                 }
                             }
-                            saveData();
-                        }
-                        document._hiddenAt = null;
+                            if(remainingSeconds % 5 === 0 || remainingSeconds <= 10) saveData();
+                        }, 1000);
+                        saveData();
                     }
+                    document._hiddenAt = null;
                 }
             });
 
@@ -1152,7 +1203,10 @@
 
             init();
 
-            window.addEventListener('beforeunload', ()=>{ if(isRunning) pauseTimer(); saveData(); });
+            window.addEventListener('beforeunload', ()=>{
+                if(isRunning) pauseTimer();
+                saveData();
+            });
             setInterval(()=> { if(isRunning) saveData(); }, 30000);
         })();
     </script>
