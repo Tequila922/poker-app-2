@@ -657,7 +657,6 @@
 
     <script>
         (function() {
-            // 20个盲注级别
             const BLIND_LEVELS = [
                 { level: 1, small: 100, big: 200 },
                 { level: 2, small: 200, big: 400 },
@@ -706,19 +705,13 @@
             let toastTimeout = null;
             let levelUpOverlayTimeout = null;
 
-            // 屏幕唤醒锁
             let wakeLock = null;
             async function requestWakeLock() {
                 try {
                     if ('wakeLock' in navigator) {
                         wakeLock = await navigator.wakeLock.request('screen');
-                        wakeLock.addEventListener('release', () => {
-                            // 锁被释放，可尝试重新请求
-                        });
                     }
-                } catch (err) {
-                    // 静默失败，不影响主流程
-                }
+                } catch (err) {}
             }
             async function releaseWakeLock() {
                 if (wakeLock) {
@@ -727,7 +720,6 @@
                 }
             }
 
-            // 防锁屏静默音频
             let lockAudioCtx = null;
             function enableNoSleep() {
                 try {
@@ -744,6 +736,26 @@
                     source.connect(lockAudioCtx.destination);
                     source.start(0);
                 } catch (e) {}
+            }
+
+            function playAudio(filename) {
+                try {
+                    const audio = new Audio('sounds/' + filename);
+                    audio.play().catch(() => {});
+                } catch (e) {}
+            }
+
+            function speakLevelUp(level) {
+                if (level === 1) return; // 第1级不语音（由start处理）
+                playAudio('level' + level + '.mp3');
+            }
+
+            function speakGameStart() {
+                playAudio('start.mp3');
+            }
+
+            function speakFinal() {
+                playAudio('final.mp3');
             }
 
             const STORAGE_KEY = 'all_in_night_data_v3';
@@ -957,31 +969,10 @@
                 levelUpOverlayTimeout = setTimeout(()=> $levelUpOverlay.classList.remove('active'), 2200);
             }
 
-            function speakLevelUp(levelData) {
-                try {
-                    if(window.speechSynthesis) window.speechSynthesis.cancel();
-                    const utt = new SpeechSynthesisUtterance(
-                        'Level '+levelData.level+'. Blinds are '+levelData.small+' and '+levelData.big+'.');
-                    utt.lang = 'en-US'; utt.rate = 0.9; utt.pitch = 1.05;
-                    setTimeout(()=> speechSynthesis.speak(utt), 150);
-                } catch(e) {}
-            }
-
-            function speakGameStart() {
-                try {
-                    if(window.speechSynthesis) window.speechSynthesis.cancel();
-                    const level = BLIND_LEVELS[currentLevelIndex];
-                    const utt = new SpeechSynthesisUtterance(
-                        'Game started. Level '+level.level+', blinds '+level.small+' and '+level.big+'.');
-                    utt.lang = 'en-US'; utt.rate = 0.9;
-                    setTimeout(()=> speechSynthesis.speak(utt), 100);
-                } catch(e) {}
-            }
-
             function startTimer() {
                 if(isRunning) return;
                 enableNoSleep();
-                requestWakeLock(); // 请求屏幕唤醒锁
+                requestWakeLock();
                 if(remainingSeconds <= 0 && currentLevelIndex >= TOTAL_LEVELS-1) {
                     showToast('已是最后级别'); return;
                 }
@@ -990,7 +981,9 @@
                 updateStartButton();
                 updateTimerDisplay();
                 saveData();
-                if(remainingSeconds === LEVEL_DURATION_SECONDS && currentLevelIndex === 0) speakGameStart();
+                if(currentLevelIndex === 0 && remainingSeconds === LEVEL_DURATION_SECONDS) {
+                    speakGameStart();
+                }
 
                 timerInterval = setInterval(()=>{
                     remainingSeconds--;
@@ -998,7 +991,7 @@
                     if(remainingSeconds <= 0) {
                         clearInterval(timerInterval); timerInterval = null;
                         isRunning = false; updateStartButton();
-                        releaseWakeLock(); // 释放唤醒锁
+                        releaseWakeLock();
                         if(currentLevelIndex < TOTAL_LEVELS-1) {
                             advanceLevel();
                             remainingSeconds = LEVEL_DURATION_SECONDS;
@@ -1010,14 +1003,7 @@
                             remainingSeconds = 0;
                             updateTimerDisplay();
                             saveData();
-                            try {
-                                if(window.speechSynthesis) {
-                                    window.speechSynthesis.cancel();
-                                    const utt = new SpeechSynthesisUtterance('Final level completed. Tournament finished.');
-                                    utt.lang = 'en-US'; utt.rate = 0.85;
-                                    setTimeout(()=> speechSynthesis.speak(utt), 200);
-                                }
-                            } catch(e) {}
+                            speakFinal();
                         }
                     }
                     if(remainingSeconds % 5 === 0 || remainingSeconds <= 10) saveData();
@@ -1028,7 +1014,7 @@
                 if(!isRunning) return;
                 clearInterval(timerInterval); timerInterval = null;
                 isRunning = false; updateStartButton(); updateTimerDisplay(); saveData();
-                releaseWakeLock(); // 暂停时释放唤醒锁
+                releaseWakeLock();
             }
 
             function resetTimer() {
@@ -1047,7 +1033,7 @@
                     updateBlindsDisplay(); updateTimerDisplay(); saveData();
                     showLevelUpOverlay();
                     showToast('⬆ 升至第'+level.level+'级别: '+level.small.toLocaleString()+'/'+level.big.toLocaleString(), true);
-                    speakLevelUp(level);
+                    speakLevelUp(level.level);
                 } else showToast('已是最后级别');
             }
 
@@ -1107,7 +1093,6 @@
                 setTimeout(()=> $playerList.scrollTop = $playerList.scrollHeight, 200);
             }
 
-            // 页面可见性处理（精确计时补偿）
             document.addEventListener('visibilitychange', ()=>{
                 if(document.hidden) {
                     if(isRunning && timerInterval) {
@@ -1121,7 +1106,6 @@
                         remainingSeconds = Math.max(0, remainingSeconds - elapsed);
                         updateTimerDisplay();
                         if(remainingSeconds <= 0) {
-                            // 时间到，自动升级
                             if(currentLevelIndex < TOTAL_LEVELS-1) {
                                 advanceLevel();
                                 remainingSeconds = LEVEL_DURATION_SECONDS;
@@ -1138,7 +1122,6 @@
                                 return;
                             }
                         }
-                        // 重新启动定时器
                         timerInterval = setInterval(()=>{
                             remainingSeconds--;
                             updateTimerDisplay();
@@ -1157,6 +1140,7 @@
                                     remainingSeconds = 0;
                                     updateTimerDisplay();
                                     saveData();
+                                    speakFinal();
                                 }
                             }
                             if(remainingSeconds % 5 === 0 || remainingSeconds <= 10) saveData();
